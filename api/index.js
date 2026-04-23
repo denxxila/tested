@@ -146,6 +146,43 @@ module.exports = async (req, res) => {
       text-align: center;
     }
     .stats div span { display: block; font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .music-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #2a2a2a;
+      background: #141414;
+    }
+    .music-box img {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #333;
+      animation: rotateCover 4s linear infinite;
+      animation-play-state: paused;
+    }
+    .music-box img.playing { animation-play-state: running; }
+    @keyframes rotateCover { to { transform: rotate(360deg); } }
+    .music-info { flex: 1; overflow: hidden; }
+    .music-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .music-author { font-size: 0.75rem; color: #666; }
+    .music-duration { font-size: 0.75rem; color: #555; margin-top: 2px; }
+    .badge-original {
+      font-size: 0.65rem;
+      background: #1db954;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
     .actions { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
     .btn-dl {
       display: flex;
@@ -185,6 +222,16 @@ module.exports = async (req, res) => {
       display: none;
     }
     .error.show { display: block; }
+    .photo-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      background: #0077ff;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -204,20 +251,39 @@ module.exports = async (req, res) => {
   <div class="error" id="errBox"></div>
 
   <div class="card" id="card">
+    <!-- Author -->
     <div class="author">
       <img id="avatar" src="" alt="" />
       <div>
         <div class="name" id="nickname"></div>
         <div class="uid" id="uid"></div>
+        <div class="uid" id="verified" style="color:#00f2ea;font-size:0.75rem;margin-top:2px;"></div>
       </div>
     </div>
+
+    <!-- Caption -->
     <div class="caption" id="caption"></div>
+
+    <!-- Stats -->
     <div class="stats">
       <div><span id="likes"></span>Likes</div>
       <div><span id="comments"></span>Komentar</div>
       <div><span id="views"></span>Views</div>
       <div><span id="shares"></span>Shares</div>
+      <div><span id="saved"></span>Saved</div>
     </div>
+
+    <!-- Music -->
+    <div class="music-box" id="musicBox">
+      <img id="musicCover" src="" alt="music" />
+      <div class="music-info">
+        <div class="music-title" id="musicTitle"></div>
+        <div class="music-author" id="musicAuthor"></div>
+        <div class="music-duration" id="musicDuration"></div>
+      </div>
+    </div>
+
+    <!-- Actions -->
     <div class="actions">
       <button class="btn-dl btn-video" id="b1" onclick="dl('video')">
         <span class="mini-spin"></span><span>⬇ Download Video (No Watermark)</span>
@@ -235,13 +301,22 @@ module.exports = async (req, res) => {
     let vd = null;
 
     function fmt(n) {
-      n = parseInt(n)||0;
-      return n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
+      n = parseInt(n) || 0;
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return n;
+    }
+
+    function fmtDuration(s) {
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return m + ':' + String(sec).padStart(2, '0');
     }
 
     async function fetchVideo() {
       const url = document.getElementById('urlInput').value.trim();
       if (!url) return;
+
       document.getElementById('card').classList.remove('show');
       document.getElementById('errBox').classList.remove('show');
       document.getElementById('loading').classList.add('show');
@@ -250,18 +325,69 @@ module.exports = async (req, res) => {
       try {
         const res = await fetch('/api/index?fetch=1&url=' + encodeURIComponent(url));
         const json = await res.json();
-        if (!json.status) throw new Error('Video tidak ditemukan.');
+
+        if (!json.status || !json.data) {
+          throw new Error(json.message || 'Video tidak ditemukan.');
+        }
+
         vd = json.data;
-        document.getElementById('avatar').src = vd.author.avatarThumb;
-        document.getElementById('nickname').textContent = vd.author.nickname;
-        document.getElementById('uid').textContent = '@' + vd.author.uniqueId;
-        document.getElementById('caption').textContent = vd.caption;
-        document.getElementById('likes').textContent = fmt(vd.statistic.likes);
-        document.getElementById('comments').textContent = fmt(vd.statistic.comments);
-        document.getElementById('views').textContent = fmt(vd.statistic.views);
-        document.getElementById('shares').textContent = fmt(vd.statistic.shares);
+        const author = vd.author;
+        const stat = vd.statistic;
+        const music = vd.music;
+
+        // Author
+        document.getElementById('avatar').src = author.avatarMedium || author.avatarThumb || '';
+        document.getElementById('nickname').textContent = author.nickname || '-';
+        document.getElementById('uid').textContent = '@' + (author.uniqueId || '-');
+        document.getElementById('verified').textContent = author.verified ? '✔ Verified' : '';
+
+        // Caption + photo badge
+        const captionEl = document.getElementById('caption');
+        captionEl.innerHTML = '';
+        if (vd.photo) {
+          const badge = document.createElement('span');
+          badge.className = 'photo-badge';
+          badge.textContent = 'Slideshow';
+          captionEl.appendChild(badge);
+          captionEl.appendChild(document.createTextNode(' '));
+        }
+        captionEl.appendChild(document.createTextNode(vd.caption || ''));
+
+        // Stats
+        document.getElementById('likes').textContent = fmt(stat.likes);
+        document.getElementById('comments').textContent = fmt(stat.comments);
+        document.getElementById('views').textContent = fmt(stat.views);
+        document.getElementById('shares').textContent = fmt(stat.shares);
+        document.getElementById('saved').textContent = fmt(stat.saved);
+
+        // Music
+        document.getElementById('musicCover').src = music.cover || '';
+        const titleEl = document.getElementById('musicTitle');
+        titleEl.innerHTML = (music.title || 'Unknown') +
+          (music.original ? '<span class="badge-original">Original</span>' : '');
+        document.getElementById('musicAuthor').textContent = '🎵 ' + (music.author || '-');
+        document.getElementById('musicDuration').textContent =
+          '⏱ ' + fmtDuration(music.duration || 0) +
+          (music.copyright ? '  🔒 Copyright' : '');
+
+        // Rotate cover animation if playing
+        const coverImg = document.getElementById('musicCover');
+        coverImg.classList.add('playing');
+
+        // Disable HD button if no videoWM
+        document.getElementById('b2').disabled = !vd.videoWM;
+
+        // Disable audio button if no proper audio url
+        const hasAudio = vd.audio && vd.audio.startsWith('http') && !vd.audio.includes('snaptikpro.net/\\"');
+        document.getElementById('b3').disabled = !hasAudio;
+        if (!hasAudio) {
+          document.getElementById('b3').querySelector('span:last-child').textContent = '🎵 Audio tidak tersedia';
+        } else {
+          document.getElementById('b3').querySelector('span:last-child').textContent = '🎵 Download Audio';
+        }
+
         document.getElementById('card').classList.add('show');
-      } catch(e) {
+      } catch (e) {
         document.getElementById('errBox').textContent = e.message;
         document.getElementById('errBox').classList.add('show');
       } finally {
@@ -272,21 +398,34 @@ module.exports = async (req, res) => {
 
     async function dl(type) {
       if (!vd) return;
-      const ids = { video:'b1', hd:'b2', audio:'b3' };
+
+      const ids = { video: 'b1', hd: 'b2', audio: 'b3' };
       const btn = document.getElementById(ids[type]);
       btn.classList.add('busy');
       btn.disabled = true;
 
+      // Check audio availability
+      const audioUrl = vd.audio && vd.audio.startsWith('http') ? vd.audio : null;
+
       const map = {
-        video: { url: vd.video,   name: 'tiktok_nowm_'+vd.id+'.mp4' },
-        hd:    { url: vd.videoWM, name: 'tiktok_hd_'+vd.id+'.mp4'   },
-        audio: { url: vd.audio,   name: 'tiktok_audio_'+vd.id+'.mp3' }
+        video: { url: vd.video,    name: 'tiktok_nowm_' + vd.id + '.mp4' },
+        hd:    { url: vd.videoWM,  name: 'tiktok_hd_'   + vd.id + '.mp4' },
+        audio: { url: audioUrl,    name: 'tiktok_audio_' + vd.id + '.mp3' }
       };
+
       const { url, name } = map[type];
+
+      if (!url) {
+        alert('URL tidak tersedia untuk tipe ini.');
+        btn.classList.remove('busy');
+        btn.disabled = false;
+        return;
+      }
 
       try {
         const proxyUrl = '/api/index?download=' + encodeURIComponent(url) + '&filename=' + encodeURIComponent(name);
         const r = await fetch(proxyUrl);
+        if (!r.ok) throw new Error('Server error ' + r.status);
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -294,9 +433,9 @@ module.exports = async (req, res) => {
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(a.href);
-      } catch {
-        alert('Download gagal, coba lagi.');
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      } catch (e) {
+        alert('Download gagal: ' + e.message);
       } finally {
         btn.classList.remove('busy');
         btn.disabled = false;
