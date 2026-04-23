@@ -4,7 +4,6 @@ module.exports = async (req, res) => {
   // 1. Fetch video data (AJAX)
   if (req.query.fetch) {
     try {
-      const { default: fetch } = await import('node-fetch');
       const tiktokUrl = req.query.url;
 
       if (!tiktokUrl) {
@@ -225,7 +224,7 @@ module.exports = async (req, res) => {
     .btn-video { background: linear-gradient(135deg, #ff0050, #ff375f); color: #fff; }
     .btn-hd    { background: linear-gradient(135deg, #7c3aed, #9f5cf7); color: #fff; }
     .btn-audio { background: #1e1e1e; color: #ccc; border: 1px solid #333 !important; }
-    .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+    .btn-dl[disabled] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     .error {
       color: #ff4d4d;
       background: #1a0000;
@@ -290,13 +289,13 @@ module.exports = async (req, res) => {
     </div>
 
     <div class="actions">
-      <a class="btn-dl btn-video" id="b1" href="#" download>
+      <a class="btn-dl btn-video" id="b1" href="#" target="_blank" rel="noopener noreferrer">
         ⬇ Download Video (No Watermark)
       </a>
-      <a class="btn-dl btn-hd" id="b2" href="#" download>
+      <a class="btn-dl btn-hd" id="b2" href="#" target="_blank" rel="noopener noreferrer">
         ⬇ Download Video HD
       </a>
-      <a class="btn-dl btn-audio" id="b3" href="#" download>
+      <a class="btn-dl btn-audio" id="b3" href="#" target="_blank" rel="noopener noreferrer">
         🎵 Download Audio
       </a>
     </div>
@@ -375,7 +374,7 @@ module.exports = async (req, res) => {
       const music  = d.music     || {};
 
       // Author
-      document.getElementById('avatar').src       = author.avatarMedium || author.avatarThumb || '';
+      document.getElementById('avatar').src          = author.avatarMedium || author.avatarThumb || '';
       document.getElementById('nickname').textContent = author.nickname  || '-';
       document.getElementById('uid').textContent      = '@' + (author.uniqueId || '-');
       document.getElementById('verified').textContent = author.verified  ? '✔ Verified' : '';
@@ -385,7 +384,7 @@ module.exports = async (req, res) => {
       captionEl.innerHTML = '';
       if (d.photo) {
         const b = document.createElement('span');
-        b.className = 'badge badge-photo';
+        b.className   = 'badge badge-photo';
         b.textContent = 'Slideshow';
         captionEl.appendChild(b);
         captionEl.appendChild(document.createTextNode(' '));
@@ -405,20 +404,20 @@ module.exports = async (req, res) => {
       titleEl.innerHTML = escHtml(music.title || 'Unknown');
       if (music.original) {
         const b = document.createElement('span');
-        b.className = 'badge badge-orig';
+        b.className   = 'badge badge-orig';
         b.textContent = 'Original';
         titleEl.appendChild(b);
       }
       if (music.copyright) {
         const b = document.createElement('span');
-        b.className = 'badge badge-copy';
+        b.className   = 'badge badge-copy';
         b.textContent = '©';
         titleEl.appendChild(b);
       }
       document.getElementById('musicSub').textContent =
         '🎵 ' + (music.author || '-') + '  ⏱ ' + fmtDur(music.duration);
 
-      // Tombol — langsung pakai href ke URL asli
+      // Tombol
       const hasVideo = d.video   && d.video.startsWith('http');
       const hasHD    = d.videoWM && d.videoWM.startsWith('http');
       const hasAudio = d.audio   && d.audio.startsWith('http') && !d.audio.includes('snaptikpro.net');
@@ -433,7 +432,7 @@ module.exports = async (req, res) => {
         b1.textContent = '⬇ Download Video (No Watermark)';
       } else {
         b1.href = '#';
-        b1.setAttribute('disabled', true);
+        b1.setAttribute('disabled', '');
         b1.textContent = '⬇ Video tidak tersedia';
       }
 
@@ -443,7 +442,7 @@ module.exports = async (req, res) => {
         b2.textContent = '⬇ Download Video HD';
       } else {
         b2.href = '#';
-        b2.setAttribute('disabled', true);
+        b2.setAttribute('disabled', '');
         b2.textContent = '⬇ HD tidak tersedia';
       }
 
@@ -453,7 +452,7 @@ module.exports = async (req, res) => {
         b3.textContent = '🎵 Download Audio';
       } else {
         b3.href = '#';
-        b3.setAttribute('disabled', true);
+        b3.setAttribute('disabled', '');
         b3.textContent = '🎵 Audio tidak tersedia';
       }
 
