@@ -1,22 +1,38 @@
 module.exports = async (req, res) => {
   const API_KEY = 'Exjfjg';
-  const url = req.query.url || '';
 
-  let result = null;
-  let error = null;
-
-  if (url) {
+  // 1. Proxy download
+  if (req.query.download) {
     try {
-      const apiUrl = `https://api.neoxr.eu/api/tiktok?url=${encodeURIComponent(url)}&apikey=${API_KEY}`;
-      const response = await fetch(apiUrl);
-      const json = await response.json();
-      if (json.status) result = json.data;
-      else error = 'Video tidak ditemukan.';
-    } catch (e) {
-      error = 'Gagal mengambil data. Coba lagi.';
+      const { default: fetch } = await import('node-fetch');
+      const fileUrl = decodeURIComponent(req.query.download);
+      const filename = req.query.filename || 'tiktok.mp4';
+      const fileRes = await fetch(fileUrl);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', fileRes.headers.get('content-type') || 'video/mp4');
+      fileRes.body.pipe(res);
+    } catch {
+      res.status(500).send('Download gagal.');
     }
+    return;
   }
 
+  // 2. Fetch video data (AJAX)
+  if (req.query.fetch) {
+    try {
+      const { default: fetch } = await import('node-fetch');
+      const apiUrl = `https://api.neoxr.eu/api/tiktok?url=${encodeURIComponent(req.query.url)}&apikey=${API_KEY}`;
+      const apiRes = await fetch(apiUrl);
+      const json = await apiRes.json();
+      res.setHeader('Content-Type', 'application/json');
+      res.status(200).json(json);
+    } catch {
+      res.status(500).json({ status: false, message: 'Gagal mengambil data.' });
+    }
+    return;
+  }
+
+  // 3. Halaman utama
   res.setHeader('Content-Type', 'text/html');
   res.status(200).send(`
 <!DOCTYPE html>
@@ -46,7 +62,7 @@ module.exports = async (req, res) => {
       -webkit-text-fill-color: transparent;
     }
     p.sub { color: #666; margin-bottom: 32px; font-size: 0.95rem; }
-    form {
+    .search-box {
       width: 100%;
       max-width: 560px;
       display: flex;
@@ -64,7 +80,7 @@ module.exports = async (req, res) => {
       outline: none;
     }
     input:focus { border-color: #ff0050; }
-    button {
+    #searchBtn {
       padding: 14px 22px;
       border-radius: 12px;
       border: none;
@@ -73,9 +89,28 @@ module.exports = async (req, res) => {
       font-weight: 700;
       cursor: pointer;
       font-size: 0.95rem;
+      min-width: 110px;
     }
-    button:hover { opacity: 0.85; }
+    #searchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .loading.show { display: flex; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #2a2a2a;
+      border-top-color: #ff0050;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { color: #888; font-size: 0.9rem; }
     .card {
+      display: none;
       width: 100%;
       max-width: 560px;
       background: #1a1a1a;
@@ -83,6 +118,7 @@ module.exports = async (req, res) => {
       overflow: hidden;
       border: 1px solid #2a2a2a;
     }
+    .card.show { display: block; }
     .author {
       display: flex;
       align-items: center;
@@ -90,13 +126,9 @@ module.exports = async (req, res) => {
       padding: 16px;
       border-bottom: 1px solid #2a2a2a;
     }
-    .author img {
-      width: 48px; height: 48px;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-    .author .name { font-weight: 700; font-size: 1rem; }
-    .author .id { color: #666; font-size: 0.8rem; }
+    .author img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
+    .author .name { font-weight: 700; }
+    .author .uid { color: #666; font-size: 0.8rem; }
     .caption {
       padding: 14px 16px;
       font-size: 0.9rem;
@@ -114,24 +146,33 @@ module.exports = async (req, res) => {
       text-align: center;
     }
     .stats div span { display: block; font-size: 1.1rem; font-weight: 700; color: #fff; }
-    .actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 16px;
-    }
+    .actions { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
     .btn-dl {
-      display: block;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       padding: 13px;
       border-radius: 10px;
       font-weight: 700;
-      text-decoration: none;
       font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      width: 100%;
     }
     .btn-video { background: linear-gradient(135deg, #ff0050, #ff375f); color: #fff; }
-    .btn-hd { background: linear-gradient(135deg, #7c3aed, #9f5cf7); color: #fff; }
-    .btn-audio { background: #1e1e1e; color: #ccc; border: 1px solid #333; }
+    .btn-hd    { background: linear-gradient(135deg, #7c3aed, #9f5cf7); color: #fff; }
+    .btn-audio { background: #1e1e1e; color: #ccc; border: 1px solid #333 !important; }
+    .btn-dl:disabled { opacity: 0.6; cursor: not-allowed; }
+    .mini-spin {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+    .btn-dl.busy .mini-spin { display: inline-block; }
     .error {
       color: #ff4d4d;
       background: #1f0000;
@@ -141,43 +182,131 @@ module.exports = async (req, res) => {
       max-width: 560px;
       width: 100%;
       text-align: center;
+      display: none;
     }
+    .error.show { display: block; }
   </style>
 </head>
 <body>
   <h1>TikTok Downloader</h1>
   <p class="sub">Download video TikTok tanpa watermark</p>
 
-  <form method="GET" action="/">
-    <input name="url" type="text" placeholder="Tempel link TikTok di sini..." value="${url.replace(/"/g, '&quot;')}" />
-    <button type="submit">Download</button>
-  </form>
+  <div class="search-box">
+    <input id="urlInput" type="text" placeholder="Tempel link TikTok di sini..." />
+    <button id="searchBtn" onclick="fetchVideo()">Cari</button>
+  </div>
 
-  ${error ? `<div class="error">${error}</div>` : ''}
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Mengambil data video...</p>
+  </div>
 
-  ${result ? `
-  <div class="card">
+  <div class="error" id="errBox"></div>
+
+  <div class="card" id="card">
     <div class="author">
-      <img src="${result.author.avatarThumb}" alt="avatar" />
+      <img id="avatar" src="" alt="" />
       <div>
-        <div class="name">${result.author.nickname}</div>
-        <div class="id">@${result.author.uniqueId}</div>
+        <div class="name" id="nickname"></div>
+        <div class="uid" id="uid"></div>
       </div>
     </div>
-    <div class="caption">${result.caption}</div>
+    <div class="caption" id="caption"></div>
     <div class="stats">
-      <div><span>${(result.statistic.likes/1000).toFixed(1)}K</span>Likes</div>
-      <div><span>${result.statistic.comments}</span>Komentar</div>
-      <div><span>${(result.statistic.views/1000).toFixed(1)}K</span>Views</div>
-      <div><span>${(result.statistic.shares/1000).toFixed(1)}K</span>Shares</div>
+      <div><span id="likes"></span>Likes</div>
+      <div><span id="comments"></span>Komentar</div>
+      <div><span id="views"></span>Views</div>
+      <div><span id="shares"></span>Shares</div>
     </div>
     <div class="actions">
-      <a class="btn-dl btn-video" href="${result.video}" target="_blank">⬇ Download Video (No Watermark)</a>
-      <a class="btn-dl btn-hd" href="${result.videoWM}" target="_blank">⬇ Download Video HD</a>
-      <a class="btn-dl btn-audio" href="${result.audio}" target="_blank">🎵 Download Audio</a>
+      <button class="btn-dl btn-video" id="b1" onclick="dl('video')">
+        <span class="mini-spin"></span><span>⬇ Download Video (No Watermark)</span>
+      </button>
+      <button class="btn-dl btn-hd" id="b2" onclick="dl('hd')">
+        <span class="mini-spin"></span><span>⬇ Download Video HD</span>
+      </button>
+      <button class="btn-dl btn-audio" id="b3" onclick="dl('audio')">
+        <span class="mini-spin"></span><span>🎵 Download Audio</span>
+      </button>
     </div>
   </div>
-  ` : ''}
+
+  <script>
+    let vd = null;
+
+    function fmt(n) {
+      n = parseInt(n)||0;
+      return n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
+    }
+
+    async function fetchVideo() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+      document.getElementById('card').classList.remove('show');
+      document.getElementById('errBox').classList.remove('show');
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('searchBtn').disabled = true;
+
+      try {
+        const res = await fetch('/api/index?fetch=1&url=' + encodeURIComponent(url));
+        const json = await res.json();
+        if (!json.status) throw new Error('Video tidak ditemukan.');
+        vd = json.data;
+        document.getElementById('avatar').src = vd.author.avatarThumb;
+        document.getElementById('nickname').textContent = vd.author.nickname;
+        document.getElementById('uid').textContent = '@' + vd.author.uniqueId;
+        document.getElementById('caption').textContent = vd.caption;
+        document.getElementById('likes').textContent = fmt(vd.statistic.likes);
+        document.getElementById('comments').textContent = fmt(vd.statistic.comments);
+        document.getElementById('views').textContent = fmt(vd.statistic.views);
+        document.getElementById('shares').textContent = fmt(vd.statistic.shares);
+        document.getElementById('card').classList.add('show');
+      } catch(e) {
+        document.getElementById('errBox').textContent = e.message;
+        document.getElementById('errBox').classList.add('show');
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+        document.getElementById('searchBtn').disabled = false;
+      }
+    }
+
+    async function dl(type) {
+      if (!vd) return;
+      const ids = { video:'b1', hd:'b2', audio:'b3' };
+      const btn = document.getElementById(ids[type]);
+      btn.classList.add('busy');
+      btn.disabled = true;
+
+      const map = {
+        video: { url: vd.video,   name: 'tiktok_nowm_'+vd.id+'.mp4' },
+        hd:    { url: vd.videoWM, name: 'tiktok_hd_'+vd.id+'.mp4'   },
+        audio: { url: vd.audio,   name: 'tiktok_audio_'+vd.id+'.mp3' }
+      };
+      const { url, name } = map[type];
+
+      try {
+        const proxyUrl = '/api/index?download=' + encodeURIComponent(url) + '&filename=' + encodeURIComponent(name);
+        const r = await fetch(proxyUrl);
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch {
+        alert('Download gagal, coba lagi.');
+      } finally {
+        btn.classList.remove('busy');
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') fetchVideo();
+    });
+  </script>
 </body>
 </html>
   `);
