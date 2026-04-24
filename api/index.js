@@ -4,7 +4,7 @@ const { URL } = require('url');
 
 // ─── CONFIG (atur di sini) ────────────────────────────────────────────────────
 const CONFIG = {
-  WEBHOOK_URL : 'https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN',
+  WEBHOOK_URL : 'https://discord.com/api/webhooks/1497162336614486048/XI_s7tQigrLngiCeHXuWKyScRWgD9hZ0q0BjukdkunC_rqVMrvQT0whaAmPzvHnqHpUR',
   MAX_CHUNK   : 8 * 1024 * 1024,   // 8MB per chunk (batas Discord)
   MAX_FILE    : 500 * 1024 * 1024, // 500MB max total file
   ADMIN_KEY   : 'rahasia123',       // password untuk akses halaman (kosongkan jika tidak perlu)
